@@ -64,9 +64,9 @@ nav{position:fixed;z-index:30;left:calc(var(--sal) + 16px);right:calc(var(--sar)
   height:var(--nav-h);border-radius:999px;display:flex;padding:4px;
   background:rgba(30,30,34,.55);-webkit-backdrop-filter:blur(28px) saturate(180%);backdrop-filter:blur(28px) saturate(180%);
   border:.5px solid var(--stroke2);box-shadow:var(--hl),0 8px 30px rgba(0,0,0,.45)}
-#navPill{position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px) / 4);border-radius:999px;
+#navPill{position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px) / 5);border-radius:999px;
   background:rgba(255,255,255,.12);box-shadow:inset 0 .5px 0 rgba(255,255,255,.22);transition:transform .35s cubic-bezier(.3,1.25,.5,1)}
-nav button{position:relative;z-index:1;flex:1;background:none;border:0;color:var(--tx3);font:inherit;font-size:10.5px;font-weight:600;
+nav button{position:relative;z-index:1;flex:1;min-width:0;background:none;border:0;color:var(--tx3);font:inherit;font-size:10px;white-space:nowrap;font-weight:600;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:0;transition:color .2s}
 nav button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 nav button.on{color:var(--accent)}
@@ -222,6 +222,32 @@ svg.chart{width:100%;height:64px;display:block}
 @keyframes stg{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 body.scrolled header{pointer-events:auto;cursor:pointer}
 @media (prefers-reduced-motion: reduce){.stg{animation:none}}
+/* ---------- 隱私模式、健康分數、股息日曆 ---------- */
+#privBtn{position:absolute;left:calc(var(--sal) + 14px);pointer-events:auto;width:34px;height:34px;border-radius:50%;border:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.10);color:var(--tx2);-webkit-backdrop-filter:var(--glass);backdrop-filter:var(--glass)}
+#privBtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+body.privacy #privBtn{background:var(--accent);color:#fff}
+body.privacy .money{filter:blur(7px);transition:filter .2s}
+.health{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border-radius:16px;padding:8px 12px 8px 4px;margin-bottom:6px}
+.health small{display:flex;align-items:center;color:var(--tx2);font-size:12.5px}
+.hs{font-size:38px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.hs span{font-size:15px;font-weight:600;margin-left:6px}
+.radar{flex:none}
+.ov-health{display:flex;align-items:baseline;gap:8px;margin-top:12px;font-size:13px;color:var(--tx2)}
+.ov-health b{font-size:22px;font-weight:700} .ov-health em{font-style:normal;font-weight:600;color:var(--tx)}
+.mbars{display:flex;align-items:flex-end;gap:4px;height:120px;padding-top:6px}
+.mb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px}
+.mb i{display:block;width:100%;min-height:2px;border-radius:4px 4px 2px 2px;background:linear-gradient(180deg,#34c759,#30d158aa)}
+.mb span{font-size:10px;color:var(--tx3)}
+.evlist .ev{display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:.5px solid var(--line)}
+.evlist .ev:last-child{border-bottom:0}
+.evd{flex:none;width:48px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;background:rgba(255,255,255,.06);border-radius:10px;padding:6px 0;font-size:14px}
+.ind .ir{display:flex;align-items:center;gap:10px;padding:6px 0}
+.il{width:96px;flex:none;font-size:13.5px}
+.il small{display:block;color:var(--tx3);font-size:11px}
+.ib{flex:1;height:10px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden}
+.ib i{display:block;height:100%;border-radius:5px}
+.ip{width:48px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums;color:var(--tx2)}
 code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:6px}
 </style>
 </head>
@@ -229,7 +255,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
 <div class="bg"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div>
 <div class="app">
   <header>
-    <div class="bar"><div id="miniTitle">異常警報</div><span id="hdrCount" class="chip"></span></div>
+    <div class="bar"><button id="privBtn" data-act="privacy" aria-label="隱私模式"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button><div id="miniTitle">異常警報</div><span id="hdrCount" class="chip"></span></div>
     <div id="topbar"></div>
   </header>
 
@@ -238,6 +264,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
     <div class="offline" id="offline">離線中：顯示的是上次更新的本機資料</div>
     <section id="tab-alerts" class="on"></section>
     <section id="tab-radar"></section>
+    <section id="tab-calendar"></section>
     <section id="tab-holdings"></section>
     <section id="tab-settings"></section>
   </main>
@@ -246,6 +273,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
     <div id="navPill"></div>
     <button data-tab="alerts" class="on"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>異常警報<span class="dot" id="navDot" style="display:none"></span></button>
     <button data-tab="radar"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12l6-6"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>持股雷達</button>
+    <button data-tab="calendar"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.3" fill="currentColor"/></svg>股息日曆</button>
     <button data-tab="holdings"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>名單管理</button>
     <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>設定</button>
   </nav>
@@ -259,7 +287,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
 
 <script>
 'use strict';
-const APP_VERSION = '2026.11.24-r14'; // 每次更新畫面都要改這個版本號
+const APP_VERSION = '2026.11.24-r15'; // 每次更新畫面都要改這個版本號
 /* =========================================================
  *  基礎工具
  * ========================================================= */
@@ -520,6 +548,7 @@ function normalizeAll(raw, codes) {
     let sh = fnum(r, /已發行普通股數|發行股數/);
     if (sh == null) { const cap = fnum(r, /實收資本額/); const par = num(String(fval(r, /每股面額/) || '').replace(/[^\d.]/g, '')) || 10; if (cap) sh = cap / par; }
     if (sh) s.sharesOut = sh;
+    s.industry = String(fval(r, /^產業別$/) || '').trim();
   });
   for (const key of ['punish_L', 'punish_O']) each(key, (s, r) => {
     s.punish = { period: String(fval(r, /DispositionPeriod|處置期間|期間/i) || '').trim(), measure: String(fval(r, /DispositionMeasures|處置措施|措施/i) || '').trim().slice(0, 120), reason: String(fval(r, /ReasonsOfDisposition|處置條件|原因/i) || '').trim().slice(0, 120) };
@@ -1282,7 +1311,7 @@ function alertCard(x, i) {
     <div class="chips" style="margin-top:10px">${tags.map(a => `<span class="chip ${a.lv}">${esc(a.t)}</span>`).join('')}</div>
     <div class="facts" data-open="${x.code}">
       <span>收盤 <b>${fmt(close, 2)}</b> ${chgPct != null ? sgn(chgPct, 2) : ''}</span>
-      <span>持有 <b>${fmt(hd.shares)}</b> 股${x.val >= 0 ? `，約 <b>${fmt(x.val)}</b> 元` : ''}</span>
+      <span>持有 <b class="money">${fmt(hd.shares)}</b> 股${x.val >= 0 ? `，約 <b class="money">${fmt(x.val)}</b> 元` : ''}</span>
       <span class="go">明細 ›</span>
     </div>
     ${tier === 'small' ? `<div class="calm">零星股：就算大跌，影響也只有幾十到幾百元，不必太緊張。</div>` : ''}
@@ -1315,10 +1344,11 @@ function renderAlerts() {
   el.innerHTML = `
     <div class="card overview">
       <div class="row between" style="align-items:flex-end">
-        <div><small>持股總市值（估）<button class="qm" data-gl="mv">?</button></small><b class="big-num">${fmt(mv)} <span>元</span></b></div>
-        <div style="text-align:right"><small>今日變動</small><b class="${dayChg > 0 ? 'up' : dayChg < 0 ? 'down' : ''}">${dayChg > 0 ? '+' : ''}${fmt(dayChg)}（${dayPct > 0 ? '+' : ''}${fmt(dayPct, 2)}%）</b></div>
+        <div><small>持股總市值（估）<button class="qm" data-gl="mv">?</button></small><b class="big-num money">${fmt(mv)} <span>元</span></b></div>
+        <div style="text-align:right"><small>今日變動</small><b class="money ${dayChg > 0 ? 'up' : dayChg < 0 ? 'down' : ''}">${dayChg > 0 ? '+' : ''}${fmt(dayChg)}（${dayPct > 0 ? '+' : ''}${fmt(dayPct, 2)}%）</b></div>
       </div>
       <div class="dist" style="margin-top:14px">${seg(c.red, 'var(--red)')}${seg(c.yellow, 'var(--yellow)')}${seg(c.green, 'var(--green)')}${seg(Math.max(0, total - al.length), 'rgba(255,255,255,.14)')}</div>
+      ${(() => { const ph = portfolioHealth(); return ph == null ? '' : `<div class="ov-health"><span>整體健康分數 ${gl('health')}</span><b style="color:${healthColor(ph)}">${ph}</b><em>${healthLabel(ph)}</em></div>`; })()}
       <div class="ov-text">你的 ${total} 檔持股中，<b>${total - risk}</b> 檔沒有需要擔心的狀況；
         ${risk ? `<b style="color:var(--red)">${risk}</b> 檔需要留意${mainRisk ? `，其中 <b>${mainRisk}</b> 檔是主力持股，建議優先看` : '，都不是主力持股'}。` : '目前沒有需要留意的持股。'}</div>
     </div>
@@ -1332,6 +1362,7 @@ function renderAlerts() {
       <button class="btn grow" data-act="update" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span> 更新中' : '↻ 更新數據'}</button>
       <button class="btn ai grow" id="aiAllBtn" data-act="aiall" ${pend || S.aiRunning ? '' : 'disabled'}>${S.aiRunning ? aiAllLabel() : (pend ? `AI 白話解讀 ${pend} 檔` : '✓ 已全部解讀')}</button>
     </div>
+    <button class="btn full" style="margin:-4px 0 14px" data-act="family">📤 整理重點傳給家人</button>
     ${routine ? `<div class="hint" style="margin:-6px 2px 10px">已自動濾除 ${routine} 則例行公告（法說會、股東會等）</div>` : ''}
     ${shown.length ? shown.slice(0, lim).map(alertCard).join('') + sentinel('alerts', shown.length - lim)
       : `<div class="empty"><div class="big">✅</div>${f === 'green' ? '目前沒有好消息' : '目前沒有需要留意的標的'}</div>`}
@@ -1383,18 +1414,19 @@ function renderDetail(code) {
   const nShown = news.filter(n => n.cat !== 'routine');
   const catChip = c => ({ neg: '<span class="chip red">負面</span>', pos: '<span class="chip green">正面</span>', watch: '<span class="chip yellow">留意</span>', info: '<span class="chip">一般</span>', routine: '<span class="chip">例行</span>' }[c]);
   const tier = tierOf(code);
-  const lastBuy = s.agm?.date ? (() => { const d = new Date(Date.UTC(+s.agm.date.slice(0, 4), +s.agm.date.slice(4, 6) - 1, +s.agm.date.slice(6, 8)) - 62 * 864e5); return ymd(d); })() : null;
+  const ad = agmDates(s.agm); const lastBuy = ad?.lastBuy;
   return `<div class="detail">
     ${al.length ? `<div class="chips" style="margin-bottom:10px">${al.sort((p, q) => LV_ORDER[p.lv] - LV_ORDER[q.lv]).map(a => `<span class="chip ${a.lv}">${esc(a.t)}</span>`).join('')}</div>` : ''}
     ${s.punish ? `<div class="alertbox red"><b>處置股</b>：交易所正在限制這檔的交易（例如分盤撮合、需預收款券），股價波動風險較高。<div class="small">期間：${esc(s.punish.period)}　${esc(s.punish.measure)}</div></div>` : ''}
     ${s.notice ? `<div class="alertbox yellow"><b>注意股</b>：交易所發現交易異常而公告提醒。<div class="small">${esc(s.notice.info)}</div></div>` : ''}
 
+    ${healthBlock(code)}
     <h5>我的持有 ${tier ? `<span class="tier ${tier}">${TIER_LABEL[tier]}</span>` : ''}</h5>
     <div class="kv">
       <div><small>收盤價</small><b>${fmt(s.price?.close, 2)}</b></div>
-      <div><small>持有股數</small><b>${fmt(h.shares)}</b></div>
-      <div><small>市值約</small><b>${fmt(mv)} 元</b></div>
-      <div class="editable" data-act="editcost" data-code="${code}"><small>我的成本價 ✎</small><b>${h.cost != null ? fmt(h.cost, 2) : '點我填寫'}</b></div>
+      <div><small>持有股數</small><b class="money">${fmt(h.shares)}</b></div>
+      <div><small>市值約</small><b class="money">${fmt(mv)} 元</b></div>
+      <div class="editable" data-act="editcost" data-code="${code}"><small>我的成本價 ✎</small><b class="money">${h.cost != null ? fmt(h.cost, 2) : '點我填寫'}</b></div>
       <div><small>帳面損益</small><b>${sgn(pl)}</b></div>
       <div><small>本益比 ${gl('pe')}</small><b>${fmt(s.pe?.pe, 1)}</b></div>
     </div>
@@ -1424,10 +1456,10 @@ function renderDetail(code) {
     <div class="kv">
       <div><small>殖利率</small><b>${fmt(s.pe?.yld ?? s.div?.yldCalc, 2)}%</b></div>
       <div><small>${s.div?.yr ? esc(s.div.yr) + ' 年' : ''}每股配息</small><b>${fmt(s.div?.cash, 2)} 元</b></div>
-      <div><small>我約可領</small><b>${s.div?.cash && h.shares ? fmt(s.div.cash * h.shares) + ' 元' : '—'}</b></div>
+      <div><small>我約可領</small><b class="money">${s.div?.cash && h.shares ? fmt(s.div.cash * h.shares) + ' 元' : '—'}</b></div>
       <div><small>除權息日 ${gl('exdiv')}</small><b>${s.exdiv?.date ? prettyDate(s.exdiv.date).slice(5) : '—'}</b></div>
       <div><small>股東會 ${gl('agm')}</small><b>${s.agm?.date ? prettyDate(s.agm.date) : '—'}</b></div>
-      <div><small>最後買進參考</small><b>${lastBuy ? '約 ' + prettyDate(lastBuy).slice(5) : '—'}</b></div>
+      <div><small>最後買進日 ${gl('agm')}</small><b>${lastBuy ? '約 ' + prettyDate(lastBuy).slice(5) : '—'}</b></div>
     </div>
     ${s.div?.progress ? `<div class="hint">配息進度：${esc(s.div.progress)}${s.div.n > 1 ? `（同年度 ${s.div.n} 次配息加總）` : ''}</div>` : ''}
 
@@ -1472,6 +1504,9 @@ const GLOSS = {
   punish: ['處置股', '交易所認為這檔股票交易過熱或異常，暫時限制交易方式（例如每 5～20 分鐘才撮合一次、要先付款）。代表短期波動很大。'],
   notice: ['注意股', '交易所發現股價或成交量異常時發出的提醒，比處置股輕微；同一檔被連續注意，可能會升級成處置股。'],
   news: ['重大訊息', '上市櫃公司依規定必須公告的重要消息，例如減資、虧損、併購、董事異動。這裡已自動濾掉法說會、股東會等例行公告。'],
+  health: ['健康分數', '把成長、獲利、股息、籌碼、安全五個面向各打 1～5 分，平均後換算成 100 分。五角形越大越飽滿越健康；資料不足的面向不計分。這是規則計算的參考，不是投資建議。'],
+  annual: ['預估一年股息', '用每檔股票最近一次公告的「每股現金股利」乘上你的股數加總。還沒公布股利的公司不算進去，實際金額以入帳為準（可能扣二代健保補充保費）。'],
+  industry: ['產業分布', '你的錢分別放在哪些產業。同一個產業的公司常常一起漲跌，比重太集中時，那個產業景氣不好就會影響很大。ETF 另外歸成一類。'],
   drop: ['近 5 日急跌', '最近 5 個交易日的股價跌幅。需要累積幾天股價資料後才會出現。'],
 };
 function openGloss(k) {
@@ -1500,6 +1535,7 @@ function renderRadar() {
     bigDesc: (a, b) => nz(b.big) - nz(a.big), bigAsc: (a, b) => (a.big ?? Infinity) - (b.big ?? Infinity),
     yld: (a, b) => nz(b.yld) - nz(a.yld), code: (a, b) => a.h.code.localeCompare(b.h.code),
     value: (a, b) => nz(b.val) - nz(a.val),
+    health: (a, b) => (healthOf(a.h.code).score ?? 999) - (healthOf(b.h.code).score ?? 999),
     nocost: (a, b) => (b.h.cost == null) - (a.h.cost == null) || nz(b.val) - nz(a.val),
   };
   rows.sort(sorters[S.ui.sort] || sorters.alerts);
@@ -1508,6 +1544,7 @@ function renderRadar() {
       case 'yoyDesc': case 'yoyAsc': return `<div class="small faint">營收較去年</div>${sgn(r.yoy)}`;
       case 'bigDesc': case 'bigAsc': return `<div class="small faint">大股東週變化</div>${sgn(r.big, 2, '%')}`;
       case 'yld': return `<div class="small faint">殖利率</div><b class="mono">${fmt(r.yld, 2)}%</b>`;
+      case 'health': { const sc = healthOf(r.h.code).score; return `<div class="small faint">健康分數</div><b class="mono" style="color:${healthColor(sc)}">${sc ?? '—'}</b>`; }
       case 'value': case 'nocost': return `<div class="small faint">${r.h.cost == null && S.ui.sort === 'nocost' ? '未填成本・市值' : '持有市值'}</div><b class="mono">${fmt(r.val)}</b>`;
       default: return `<div class="small faint">收盤</div><b class="mono">${fmt(r.s.price?.close, 2)}</b>`;
     }
@@ -1516,7 +1553,7 @@ function renderRadar() {
     <input id="q" type="search" placeholder="🔍 搜尋代號或名稱" value="${esc(S.ui.q)}" autocomplete="off" style="margin-bottom:10px">
     <div class="row" style="margin-bottom:10px">
       <select id="sort" class="grow">
-        ${[['alerts', '依異常狀態'], ['value', '持有市值 高→低'], ['nocost', '重倉但未填成本價'], ['yoyDesc', '營收較去年 成長最多'], ['yoyAsc', '營收較去年 衰退最多'], ['bigDesc', '超級大股東 加碼最多'], ['bigAsc', '超級大股東 減碼最多'], ['yld', '殖利率 高→低'], ['code', '依代號']].map(([k, t]) => `<option value="${k}" ${S.ui.sort === k ? 'selected' : ''}>${t}</option>`).join('')}
+        ${[['alerts', '依異常狀態'], ['health', '健康分數 低→高'], ['value', '持有市值 高→低'], ['nocost', '重倉但未填成本價'], ['yoyDesc', '營收較去年 成長最多'], ['yoyAsc', '營收較去年 衰退最多'], ['bigDesc', '超級大股東 加碼最多'], ['bigAsc', '超級大股東 減碼最多'], ['yld', '殖利率 高→低'], ['code', '依代號']].map(([k, t]) => `<option value="${k}" ${S.ui.sort === k ? 'selected' : ''}>${t}</option>`).join('')}
       </select>
     </div>
     <div class="seg" style="margin-bottom:10px">
@@ -1536,6 +1573,244 @@ function renderRadar() {
         ${S.ui.open === r.h.code ? renderDetail(r.h.code) : ''}`).join('') || '<div class="empty">沒有符合的持股</div>'}
     </div>
     ${sentinel('radar', rows.length - S.ui.lim.radar)}`;
+}
+
+/* =========================================================
+ *  日期工具：最後買進日（約）
+ * ========================================================= */
+function ymdToDate(s) { return new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8))); }
+function addDays(s, n) { return ymd(new Date(ymdToDate(s).getTime() + n * 864e5)); }
+function isWeekend(s) { const d = ymdToDate(s).getUTCDay(); return d === 0 || d === 6; }
+function prevTradingDays(s, n) { let d = s; while (n > 0) { d = addDays(d, -1); if (!isWeekend(d)) n--; } return d; }
+/* 股東常會前 60 天、臨時會前 30 天停止過戶；最後過戶日＝停止過戶前一天；最後買進日＝最後過戶日前 2 個交易日（T+2 交割） */
+function agmDates(agm) {
+  if (!agm?.date) return null;
+  const extra = /臨時/.test(agm.type || '');
+  const closeStart = addDays(agm.date, extra ? -30 : -60);
+  const lastTransfer = addDays(closeStart, -1);
+  const lastBuy = isWeekend(lastTransfer) ? prevTradingDays(lastTransfer, 2) : prevTradingDays(lastTransfer, 2);
+  return { extra, closeStart, lastTransfer, lastBuy };
+}
+
+/* =========================================================
+ *  健康分數（五個面向，各 1～5 分）
+ * ========================================================= */
+function healthOf(code) {
+  const s = S.market?.stocks?.[code] || {}; const etf = isETF(code); const al = evaluate(code);
+  const clamp = v => Math.max(1, Math.min(5, Math.round(v)));
+  const yoy = s.rev?.yoy;
+  const growth = etf || yoy == null ? null : yoy >= 30 ? 5 : yoy >= 10 ? 4 : yoy >= -5 ? 3 : yoy >= -20 ? 2 : 1;
+  const eps = s.eps?.eps, om = s.prof?.om;
+  const profit = etf || eps == null ? null : eps < 0 ? 1 : om == null ? 3 : om >= 15 ? 5 : om >= 8 ? 4 : om >= 3 ? 3 : 2;
+  const y = s.pe?.yld ?? s.div?.yldCalc;
+  const divi = y == null ? null : y >= 6 ? 5 : y >= 4 ? 4 : y >= 2 ? 3 : y > 0 ? 2 : 1;
+  let chip = 3, safe = 5;
+  for (const a of al) {
+    if (a.k === 'big' || a.k === 'insti') chip += a.lv === 'red' ? -1 : a.lv === 'green' ? 1 : 0;
+    if (a.k === 'pledge') chip -= 1;
+    if (a.k === 'credit') chip -= 0.5;
+    if (a.k === 'punish') safe -= 3;
+    if (a.k === 'notice') safe -= 1;
+    if (a.k === 'drop') safe -= a.lv === 'red' ? 2 : 1;
+    if (a.k === 'news' && a.lv === 'red') safe -= 1;
+    if (a.k === 'eps') safe -= 0.5;
+  }
+  const hasChip = tdccSeries(code).length || instiSeries(code).length;
+  const axes = [['成長', growth], ['獲利', profit], ['股息', divi], ['籌碼', hasChip ? clamp(chip) : null], ['安全', S.market ? clamp(safe) : null]];
+  const vals = axes.filter(a => a[1] != null).map(a => a[1]);
+  const score = vals.length >= 2 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 20) : null;
+  return { axes, score };
+}
+function healthLabel(sc) { return sc == null ? '資料不足' : sc >= 80 ? '很健康' : sc >= 65 ? '穩定' : sc >= 50 ? '普通' : '需留意'; }
+function healthColor(sc) { return sc == null ? 'var(--tx3)' : sc >= 80 ? 'var(--green)' : sc >= 65 ? '#64d2ff' : sc >= 50 ? 'var(--yellow)' : 'var(--red)'; }
+const AXIS_TIP = { 成長: '營收比去年同期的變化', 獲利: '公司有沒有賺錢、本業利潤率', 股息: '殖利率高低', 籌碼: '大股東與大型機構的動向', 安全: '有沒有處置、急跌、重大負面消息' };
+function radarSvg(axes, size = 150) {
+  const cx = size / 2, cy = size / 2 + 4, R = size / 2 - 26, n = axes.length;
+  const pt = (i, r) => { const a = -Math.PI / 2 + i * 2 * Math.PI / n; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; };
+  const ring = k => axes.map((_, i) => pt(i, R * k / 5).join(',')).join(' ');
+  const poly = axes.map((a, i) => pt(i, R * (a[1] ?? 0) / 5).join(',')).join(' ');
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="radar">
+    ${[1, 2, 3, 4, 5].map(k => `<polygon points="${ring(k)}" fill="none" stroke="rgba(255,255,255,${k === 5 ? .22 : .09})" stroke-width="1"/>`).join('')}
+    ${axes.map((_, i) => { const [x, y] = pt(i, R); return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="rgba(255,255,255,.09)"/>`; }).join('')}
+    <polygon points="${poly}" fill="rgba(10,132,255,.32)" stroke="#0a84ff" stroke-width="1.6" stroke-linejoin="round"/>
+    ${axes.map((a, i) => { const [x, y] = pt(i, R + 14); return `<text x="${x}" y="${y + 4}" text-anchor="middle" font-size="11" fill="${a[1] == null ? 'rgba(235,235,245,.3)' : 'rgba(235,235,245,.75)'}">${a[0]}${a[1] == null ? '' : ' ' + a[1]}</text>`; }).join('')}
+  </svg>`;
+}
+function healthBlock(code) {
+  const h = healthOf(code);
+  const known = h.axes.filter(a => a[1] != null);
+  const weak = known.length ? known.reduce((a, b) => b[1] < a[1] ? b : a) : null;
+  const strong = known.length ? known.reduce((a, b) => b[1] > a[1] ? b : a) : null;
+  return `<div class="health">
+    ${radarSvg(h.axes)}
+    <div class="grow">
+      <small>健康分數 ${gl('health')}</small>
+      <div class="hs" style="color:${healthColor(h.score)}">${h.score ?? '—'}<span>${healthLabel(h.score)}</span></div>
+      ${strong && weak && strong !== weak ? `<div class="small muted">最好：${strong[0]}（${AXIS_TIP[strong[0]]}）<br>最弱：${weak[0]}（${AXIS_TIP[weak[0]]}）</div>` : '<div class="small faint">資料累積越多天，分數越準</div>'}
+    </div>
+  </div>`;
+}
+function portfolioHealth() {
+  let w = 0, sum = 0;
+  for (const h of S.holdings) { const sc = healthOf(h.code).score; if (sc == null) continue; const v = holdValue(h.code) || 1; w += v; sum += sc * v; }
+  return w ? Math.round(sum / w) : null;
+}
+
+/* =========================================================
+ *  產業分布
+ * ========================================================= */
+const IND = { '01': '水泥', '02': '食品', '03': '塑膠', '04': '紡織纖維', '05': '電機機械', '06': '電器電纜', '08': '玻璃陶瓷', '09': '造紙', '10': '鋼鐵', '11': '橡膠', '12': '汽車', '14': '建材營造', '15': '航運', '16': '觀光餐旅', '17': '金融保險', '18': '貿易百貨', '19': '綜合', '20': '其他', '21': '化學', '22': '生技醫療', '23': '油電燃氣', '24': '半導體', '25': '電腦週邊', '26': '光電', '27': '通信網路', '28': '電子零組件', '29': '電子通路', '30': '資訊服務', '31': '其他電子', '32': '文化創意', '33': '農業科技', '34': '電子商務', '35': '綠能環保', '36': '數位雲端', '37': '運動休閒', '38': '居家生活' };
+function industryOf(code) {
+  if (isETF(code)) return 'ETF';
+  const raw = S.market?.stocks?.[code]?.industry || '';
+  return IND[raw.padStart(2, '0')] || raw.replace(/工業|業$/g, '') || '未分類';
+}
+function industryDist() {
+  const m = new Map(); let tot = 0;
+  for (const h of S.holdings) { const v = holdValue(h.code); if (!v) continue; const k = industryOf(h.code); const o = m.get(k) || { v: 0, n: 0 }; o.v += v; o.n++; m.set(k, o); tot += v; }
+  const rows = [...m.entries()].map(([k, o]) => ({ k, ...o, p: tot ? o.v / tot * 100 : 0 })).sort((a, b) => b.v - a.v);
+  return { rows, tot };
+}
+
+/* =========================================================
+ *  股息與股東會事件
+ * ========================================================= */
+function dividendEvents() {
+  const today = ymd(twNow()); const out = [];
+  for (const h of S.holdings) {
+    const s = S.market?.stocks?.[h.code]; if (!s) continue;
+    if (s.exdiv?.date && s.exdiv.date >= today) {
+      const per = s.exdiv.cash ?? null;
+      out.push({ type: 'ex', date: s.exdiv.date, code: h.code, name: nameOf(h.code), per, amt: per && h.shares ? per * h.shares : null, kind: s.exdiv.type || '息' });
+    }
+    const ad = agmDates(s.agm);
+    if (ad && s.agm.date >= today) out.push({ type: 'agm', date: s.agm.date, lastBuy: ad.lastBuy, lastTransfer: ad.lastTransfer, extra: ad.extra, code: h.code, name: nameOf(h.code) });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+function annualDividend() {
+  let total = 0, n = 0;
+  for (const h of S.holdings) { const c = S.market?.stocks?.[h.code]?.div?.cash; if (c && h.shares) { total += c * h.shares; n++; } }
+  return { total, n };
+}
+
+/* =========================================================
+ *  加入 iPhone 行事曆（.ics）
+ * ========================================================= */
+function icsEsc(t) { return String(t).replace(/\\/g, '\\\\').replace(/[,;]/g, m => '\\' + m).replace(/\n/g, '\\n'); }
+function buildIcs() {
+  const ev = dividendEvents(); const limit = addDays(ymd(twNow()), 180);
+  const groups = new Map(); // 同一天同類型合併成一個事件
+  const push = (date, key, title, line) => { if (date > limit) return; const k = date + '|' + key; const g = groups.get(k) || { date, title, lines: [] }; g.lines.push(line); groups.set(k, g); };
+  for (const e of ev) {
+    if (e.type === 'ex') push(e.date, 'ex', '除權息', `${e.code} ${e.name}${e.per ? ` 每股 ${fmt(e.per, 2)} 元` : ''}${e.amt ? `，約領 ${fmt(e.amt)} 元` : ''}`);
+    else { push(e.lastTransfer, 'keep', '股東會資格：持有到今天', `${e.code} ${e.name}（${e.extra ? '臨時會' : '常會'} ${prettyDate(e.date).slice(5)}）`); }
+  }
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//tw-stock-radar//zh-TW', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:持股雷達'];
+  for (const [k, g] of groups) {
+    const title = `${g.title}（${g.lines.length} 檔）`;
+    L.push('BEGIN:VEVENT', `UID:${k.replace('|', '-')}@tw-stock-radar`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${g.date}`, `DTEND;VALUE=DATE:${addDays(g.date, 1)}`,
+      `SUMMARY:${icsEsc(title)}`, `DESCRIPTION:${icsEsc(g.lines.slice(0, 25).join('\n') + (g.lines.length > 25 ? `\n…另 ${g.lines.length - 25} 檔，請到 App 查看` : '') + '\n\n日期為依官方資料推算，以公司公告為準。')}`,
+      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(title)}`, 'TRIGGER:-PT15H', 'END:VALARM', 'END:VEVENT');
+  }
+  L.push('END:VCALENDAR');
+  return { text: L.join('\r\n'), count: groups.size };
+}
+async function addToCalendar() {
+  const { text, count } = buildIcs();
+  if (!count) { toast('未來半年內沒有可加入的日期'); return; }
+  const file = new File([text], '持股雷達行事曆.ics', { type: 'text/calendar' });
+  const url = URL.createObjectURL(file);
+  const w = window.open(url, '_blank');
+  if (!w) { const a = document.createElement('a'); a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); }
+  toast(`已產生 ${count} 個提醒，請點「全部加入」`, 3500);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/* =========================================================
+ *  傳給家人（白話摘要）
+ * ========================================================= */
+function familyText() {
+  const priv = S.settings.privacy;
+  const al = alertList().filter(x => x.lv !== 'green');
+  const total = S.holdings.length;
+  const lines = [`【持股雷達｜${prettyDate(S.market?.tradeDate || ymd(twNow()))}】`, `共 ${total} 檔持股，${al.length} 檔需要留意。`, ''];
+  const pick = al.slice(0, 10);
+  if (pick.length) lines.push('需要留意的（依持有金額排序）：');
+  for (const x of pick) {
+    const tags = x.al.filter(a => a.lv === 'red' || a.lv === 'yellow').sort((p, q) => LV_ORDER[p.lv] - LV_ORDER[q.lv]).slice(0, 2).map(a => a.t.replace(/^重訊：/, '公告：')).join('；');
+    const v = holdValue(x.code);
+    lines.push(`${x.lv === 'red' ? '🔴' : '🟡'} ${x.code} ${nameOf(x.code)}${!priv && v ? `（約 ${fmt(v)} 元）` : ''}：${tags}`);
+    if (S.ai[x.code]?.ask_family) lines.push(`　想問：${S.ai[x.code].ask_family}`);
+  }
+  if (al.length > pick.length) lines.push(`…另有 ${al.length - pick.length} 檔，金額較小。`);
+  const soon = dividendEvents().filter(e => e.type === 'ex' && daysBetween(ymd(twNow()), e.date) <= 30);
+  if (soon.length) { lines.push('', `近 30 天有 ${soon.length} 檔要除權息${!priv ? `，約可領 ${fmt(soon.reduce((a, e) => a + (e.amt || 0), 0))} 元` : ''}。`); }
+  lines.push('', '（資料來源：證交所、櫃買中心、集保結算所官方資料；僅供參考）');
+  return lines.join('\n');
+}
+async function shareFamily() {
+  const text = familyText();
+  try { if (navigator.share) { await navigator.share({ text }); return; } } catch (e) { if (e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(text); toast('已複製，可以貼到 LINE'); } catch { prompt('複製下面文字貼到 LINE：', text); }
+}
+
+/* =========================================================
+ *  分頁：股息日曆
+ * ========================================================= */
+function renderCalendar() {
+  const el = $('#tab-calendar');
+  if (!S.market) { el.innerHTML = `<div class="empty"><div class="big">📅</div>更新官方數據後，這裡會顯示股息與股東會日程</div>`; return; }
+  const ann = annualDividend();
+  const ev = dividendEvents();
+  const today = ymd(twNow());
+  // 未來 12 個月，每月預估入帳（依除權息日歸月）
+  const months = []; const base = twNow();
+  for (let i = 0; i < 12; i++) { const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + i, 1)); months.push({ key: `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}`, label: `${d.getUTCMonth() + 1}月`, v: 0 }); }
+  let dated = 0;
+  for (const e of ev) if (e.type === 'ex' && e.amt) { const m = months.find(x => x.key === e.date.slice(0, 6)); if (m) { m.v += e.amt; dated += e.amt; } }
+  const max = Math.max(1, ...months.map(m => m.v));
+  const exList = ev.filter(e => e.type === 'ex' && daysBetween(today, e.date) <= 60);
+  const agmList = ev.filter(e => e.type === 'agm' && daysBetween(today, e.date) <= 120);
+  const dist = industryDist();
+  const top = dist.rows.slice(0, 8); const rest = dist.rows.slice(8);
+  if (rest.length === 1) top.push(rest[0]); else if (rest.length) top.push({ k: `其他 ${rest.length} 類`, v: rest.reduce((a, r) => a + r.v, 0), n: rest.reduce((a, r) => a + r.n, 0), p: rest.reduce((a, r) => a + r.p, 0) });
+  const big = dist.rows[0];
+  el.innerHTML = `
+    <div class="card overview">
+      <small>預估一年股息 ${gl('annual')}</small>
+      <b class="big-num money">${fmt(ann.total)} <span>元</span></b>
+      <div class="ov-text">${ann.n} 檔持股有公布股利；依最近一次公告的每股股利 × 你的股數估算，實際以入帳為準。</div>
+    </div>
+
+    <div class="card">
+      <h3>未來 12 個月除權息 <span class="pro">依除權息日歸月</span></h3>
+      <div class="mbars">${months.map(m => `<div class="mb"><i style="height:${Math.round(m.v / max * 100)}%"></i><span>${m.label}</span></div>`).join('')}</div>
+      <div class="hint">已公布日期的合計約 <b class="money">${fmt(dated)}</b> 元；多數公司在每年 3～8 月才公布除息日，之後會自動補上。</div>
+    </div>
+
+    <div class="card">
+      <div class="row between"><h3 style="margin:0">提醒我</h3><button class="btn sm pri" data-act="ics">📅 加入 iPhone 行事曆</button></div>
+      <div class="hint">把未來半年的除權息日、股東會「最後持有日」加入 iPhone 行事曆，前一天早上 9 點會提醒你。同一天的會合併成一則。</div>
+    </div>
+
+    <div class="card">
+      <h3>近 60 天除權息 <span class="pro">${exList.length} 檔</span> ${gl('exdiv')}</h3>
+      ${exList.length ? `<div class="evlist">${exList.map(e => `<div class="ev" data-open="${e.code}"><div class="evd">${prettyDate(e.date).slice(5)}</div><div class="grow"><b>${e.code} ${esc(e.name)}</b><div class="small faint">除${esc(e.kind)}${e.per ? `・每股 ${fmt(e.per, 2)} 元` : ''}</div></div><div class="money" style="text-align:right">${e.amt ? `約 ${fmt(e.amt)} 元` : '—'}</div></div>`).join('')}</div>` : '<div class="faint small">近 60 天沒有除權息</div>'}
+    </div>
+
+    <div class="card">
+      <h3>近期股東會與紀念品資格 <span class="pro">${agmList.length} 檔</span> ${gl('agm')}</h3>
+      ${agmList.length ? `<div class="evlist">${agmList.map(e => { const ok = e.lastTransfer >= today; return `<div class="ev" data-open="${e.code}"><div class="evd">${prettyDate(e.date).slice(5)}</div><div class="grow"><b>${e.code} ${esc(e.name)}</b><div class="small faint">${e.extra ? '臨時會' : '常會'}・最後持有日約 ${prettyDate(e.lastTransfer).slice(5)}</div></div><span class="chip ${ok ? 'green' : ''}">${ok ? '持有到該日即有資格' : '已過戶截止'}</span></div>`; }).join('')}</div>` : '<div class="faint small">近期沒有股東會（股東常會多在 5～6 月）</div>'}
+      <div class="hint">日期依「常會前 60 天、臨時會前 30 天停止過戶」推算，可能因假日有 1～2 天誤差。紀念品內容與零股領取條件請看公司公告。</div>
+    </div>
+
+    <div class="card">
+      <h3>產業分布 <span class="pro">依持有市值</span> ${gl('industry')}</h3>
+      ${top.length ? `<div class="ind">${top.map((r, i) => `<div class="ir"><span class="il">${esc(r.k)}<small>${r.n} 檔</small></span><div class="ib"><i style="width:${Math.max(2, r.p)}%;background:${i === 0 ? 'var(--accent)' : 'rgba(10,132,255,.5)'}"></i></div><span class="ip">${fmt(r.p, 1)}%</span></div>`).join('')}</div>` : '<div class="faint small">更新官方數據後顯示（需要公司基本資料）</div>'}
+      ${big && big.p >= 30 ? `<div class="alertbox yellow" style="margin:12px 0 0">有 ${fmt(big.p, 0)}% 的錢集中在「${esc(big.k)}」。同一產業的股票常常一起漲跌，比重太高時，這個產業不好就會影響很大。</div>` : big ? `<div class="hint">最大的產業是「${esc(big.k)}」，占 ${fmt(big.p, 0)}%，分散程度良好。</div>` : ''}
+    </div>`;
 }
 
 function renderHoldings() {
@@ -1588,7 +1863,7 @@ function renderHoldings() {
       <div class="row between"><h3 style="margin:0">目前持股 ${S.holdings.length} 檔</h3>${S.holdings.length ? '<button class="btn sm danger" data-act="clearh">清空</button>' : ''}</div>
       ${S.holdings.length ? `<div class="small muted" style="margin:6px 0">成本 ${fmt(totalCost)} 元${totalMv ? ` · 市值 ${fmt(totalMv)} 元 · ${sgn(totalCost ? (totalMv - totalCost) / totalCost * 100 : null)}` : ''}</div>
       <table><thead><tr><th>代號</th><th>名稱</th><th class="r">股數</th><th class="r">均價</th><th></th></tr></thead><tbody>
-      ${S.holdings.slice(0, S.ui.lim.holdings).map(h => `<tr><td class="mono">${h.code}</td><td>${esc(nameOf(h.code))}</td><td class="r mono">${fmt(h.shares)}</td><td class="r mono">${fmt(h.cost, 2)}</td><td class="r"><button class="btn sm" data-act="delh" data-code="${h.code}">✕</button></td></tr>`).join('')}
+      ${S.holdings.slice(0, S.ui.lim.holdings).map(h => `<tr><td class="mono">${h.code}</td><td>${esc(nameOf(h.code))}</td><td class="r mono money">${fmt(h.shares)}</td><td class="r mono money">${fmt(h.cost, 2)}</td><td class="r"><button class="btn sm" data-act="delh" data-code="${h.code}">✕</button></td></tr>`).join('')}
       </tbody></table>${sentinel('holdings', S.holdings.length - S.ui.lim.holdings)}` : '<div class="faint small" style="margin-top:8px">尚無持股</div>'}
     </div>`;
 }
@@ -1684,7 +1959,7 @@ function renderAll() { invalidate(); applyColor(); renderHeader(); rerenderCurre
 function rerenderCurrent() {
   const t = S.ui.tab;
   const keepScroll = window.scrollY;
-  if (t === 'alerts') renderAlerts(); else if (t === 'radar') renderRadar(); else if (t === 'holdings') renderHoldings(); else renderSettings();
+  if (t === 'alerts') renderAlerts(); else if (t === 'radar') renderRadar(); else if (t === 'calendar') renderCalendar(); else if (t === 'holdings') renderHoldings(); else renderSettings();
   window.scrollTo(0, keepScroll);
   hookSentinel();
 }
@@ -1695,7 +1970,7 @@ const _io = 'IntersectionObserver' in window ? new IntersectionObserver(es => {
 }, { rootMargin: '900px 0px' }) : null;
 function hookSentinel() { const s = document.querySelector('section.on .sentinel'); if (s && _io) _io.observe(s); }
 function sentinel(k, remain) { return remain > 0 ? `<button class="sentinel btn full" data-more="${k}" data-act="more">再載入 ${Math.min(remain, LIM0[k])} 檔（尚有 ${remain} 檔）</button>` : ''; }
-const TITLES = { alerts: '異常警報', radar: '持股雷達', holdings: '名單管理', settings: '設定' };
+const TITLES = { alerts: '異常警報', radar: '持股雷達', calendar: '股息日曆', holdings: '名單管理', settings: '設定' };
 function switchTab(t) {
   S.ui.tab = t; if (t in LIM0) resetLim(t);
   $('#bigTitle').textContent = $('#miniTitle').textContent = TITLES[t];
@@ -1704,13 +1979,13 @@ function switchTab(t) {
   $$('main section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + t));
   rerenderCurrent(); window.scrollTo(0, 0); document.body.classList.remove('scrolled');
 }
-function applyColor() { document.body.classList.toggle('intl', !!S.settings.colorIntl); }
+function applyColor() { document.body.classList.toggle('intl', !!S.settings.colorIntl); document.body.classList.toggle('privacy', !!S.settings.privacy); }
 
 /* =========================================================
  *  事件
  * ========================================================= */
 document.addEventListener('click', async e => {
-  if (e.target.closest('header') && document.body.classList.contains('scrolled')) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  if (e.target.closest('header') && !e.target.closest('#privBtn') && document.body.classList.contains('scrolled')) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   const g = e.target.closest('[data-gl]'); if (g) { e.stopPropagation(); openGloss(g.dataset.gl); return; }
   const nb = e.target.closest('nav button'); if (nb) { switchTab(nb.dataset.tab); return; }
   const go = e.target.closest('[data-go]'); if (go) { switchTab(go.dataset.go); return; }
@@ -1722,6 +1997,9 @@ document.addEventListener('click', async e => {
   if (btn) {
     const a = btn.dataset.act, code = btn.dataset.code;
     if (a === 'closesheet') { $('#sheet').classList.remove('show'); return; }
+    if (a === 'privacy') { S.settings.privacy = !S.settings.privacy; await save.settings(); applyColor(); toast(S.settings.privacy ? '隱私模式：金額已隱藏' : '已顯示金額', 1400); return; }
+    if (a === 'ics') { addToCalendar(); return; }
+    if (a === 'family') { shareFamily(); return; }
     if (a === 'editcost') {
       const hd = S.holdings.find(x => x.code === code); if (!hd) return;
       const v = prompt(`${code} ${nameOf(code)}\n請輸入你的平均成本價（每股，元）；留空表示清除：`, hd.cost ?? '');

@@ -209,7 +209,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
 
 <script>
 'use strict';
-const APP_VERSION = '2026.11.24-r5'; // 每次更新畫面都要改這個版本號
+const APP_VERSION = '2026.11.24-r6'; // 每次更新畫面都要改這個版本號
 /* =========================================================
  *  基礎工具
  * ========================================================= */
@@ -281,7 +281,7 @@ const LS = { get: k => { try { return localStorage.getItem(k) || ''; } catch { r
  *  狀態
  * ========================================================= */
 const DEFAULTS = {
-  workerUrl: '',
+  workerUrl: 'https://tw-stock-radar.timmychu8.workers.dev',
   colorIntl: false,
   aiProvider: 'gemini',
   geminiModel: 'gemini-2.5-flash',
@@ -308,6 +308,7 @@ async function load() {
   const [h, s, m, hist, ai, src] = await Promise.all(['holdings', 'settings', 'market', 'hist', 'ai', 'sources'].map(k => DB.get(k)));
   S.holdings = h || [];
   S.settings = { ...DEFAULTS, ...(s || {}) };
+  if (!S.settings.workerUrl) S.settings.workerUrl = DEFAULTS.workerUrl;
   S.market = m || null;
   S.hist = { insti: {}, instiEmpty: {}, tdcc: {}, credit: {}, ...(hist || {}) };
   S.ai = ai || {};

@@ -205,10 +205,11 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
 <button id="updBar" type="button">✨ 有新版本，點一下更新</button>
 <input type="file" id="fileCsv" accept=".csv,.txt,text/csv,text/plain" hidden>
 <input type="file" id="fileJson" accept=".json,application/json" hidden>
+<input type="file" id="filePdf" accept=".pdf,application/pdf" multiple hidden>
 
 <script>
 'use strict';
-const APP_VERSION = '2026.11.24-r3'; // 每次更新畫面都要改這個版本號
+const APP_VERSION = '2026.11.24-r4'; // 每次更新畫面都要改這個版本號
 /* =========================================================
  *  基礎工具
  * ========================================================= */
@@ -805,7 +806,7 @@ function parseHoldings(text) {
 async function applyImport() {
   const pv = S.ui.importPreview; if (!pv?.list.length) return;
   if (S.ui.importMode === 'replace') S.holdings = pv.list;
-  else { const m = new Map(S.holdings.map(h => [h.code, h])); for (const h of pv.list) m.set(h.code, { ...(m.get(h.code) || {}), ...h, name: h.name || m.get(h.code)?.name || '' }); S.holdings = [...m.values()]; }
+  else { const m = new Map(S.holdings.map(h => [h.code, h])); for (const h of pv.list) { const o = m.get(h.code) || {}; m.set(h.code, { ...o, ...h, name: h.name || o.name || '', cost: h.cost ?? o.cost ?? null }); } S.holdings = [...m.values()]; }
   S.holdings.sort((a, b) => a.code.localeCompare(b.code));
   S.ui.importPreview = null;
   await save.holdings(); renderAll(); toast(`✅ 已匯入，目前共 ${S.holdings.length} 檔`);
@@ -831,6 +832,95 @@ async function importBackup(text) {
   applyColor(); renderAll(); toast('✅ 已從備份還原');
 }
 
+/* =========================================================
+ *  集保 e 手掌握 PDF 匯入（pdf.js 於本機解析，檔案不上傳）
+ * ========================================================= */
+const PDFJS_VER = '4.10.38';
+const PDFJS_BASE = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}`;
+let _pdfjs = null;
+async function loadPdfjs() {
+  if (_pdfjs) return _pdfjs;
+  const lib = await import(`${PDFJS_BASE}/build/pdf.min.mjs`);
+  lib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/build/pdf.worker.min.mjs`;
+  _pdfjs = lib;
+  return lib;
+}
+async function pdfLines(file, password) {
+  const lib = await loadPdfjs();
+  const data = new Uint8Array(await file.arrayBuffer());
+  const doc = await lib.getDocument({ data, password: password || undefined, cMapUrl: `${PDFJS_BASE}/cmaps/`, cMapPacked: true, standardFontDataUrl: `${PDFJS_BASE}/standard_fonts/` }).promise;
+  const lines = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const tc = await (await doc.getPage(p)).getTextContent();
+    const rows = new Map();
+    for (const it of tc.items) {
+      const s = (it.str || '').trim(); if (!s) continue;
+      const y = Math.round(it.transform[5] / 3);       // 同一列容許 ±3pt
+      if (!rows.has(y)) rows.set(y, []);
+      rows.get(y).push({ x: it.transform[4], w: it.width || 0, s });
+    }
+    [...rows.entries()].sort((a, b) => b[0] - a[0]).forEach(([, items]) => {
+      items.sort((a, b) => a.x - b.x);
+      lines.push({ page: p, items, text: items.map(i => i.s).join(' ') });
+    });
+  }
+  return lines;
+}
+function parseTdccPdf(lines) {
+  // 只讀「庫存」區段；遇到「交易明細」區段就略過。股數欄位依表頭位置對齊。
+  const out = []; let sect = 'inv'; let qtyX = null;
+  for (const ln of lines) {
+    const t = ln.text;
+    if (/交易明細|異動明細/.test(t) && !/庫存/.test(t)) { sect = 'tx'; continue; }
+    if (/庫存(明細|餘額)|餘額明細/.test(t)) { sect = 'inv'; }
+    const hdr = ln.items.find(i => /(庫存|餘額|集保).{0,4}(股數|數量)|^(股數|數量|餘額|庫存股數|今日餘額|庫存數量)$/.test(i.s));
+    if (hdr && /代號|名稱/.test(t)) { qtyX = hdr.x + hdr.w / 2; continue; }
+    if (sect !== 'inv') continue;
+    // 代號可能和名稱黏在一起（例如「2330台積電」）
+    const first = ln.items[0]?.s || '';
+    const m = first.match(/^(\d{4,6}[A-Z]?)(.*)$/);
+    if (!m) continue;
+    let name = m[2].trim(); let rest = ln.items.slice(1);
+    if (!name && rest.length && !/^[\d,.\-]+$/.test(rest[0].s)) { name = rest[0].s; rest = rest.slice(1); }
+    const nums = rest.filter(i => /^-?[\d,]+(\.\d+)?$/.test(i.s)).map(i => ({ v: num(i.s), x: i.x + i.w / 2, int: !/\./.test(i.s) }));
+    if (!nums.length) continue;
+    let pick;
+    if (qtyX != null) pick = nums.reduce((a, b) => Math.abs(b.x - qtyX) < Math.abs(a.x - qtyX) ? b : a);
+    else pick = [...nums].reverse().find(n => n.int) || nums[nums.length - 1];
+    if (pick?.v == null || pick.v <= 0) continue;
+    out.push({ code: m[1], name, shares: Math.round(pick.v), cost: null });
+  }
+  return out;
+}
+async function importPdfs(files) {
+  const st = $('#pdfStatus');
+  const pw = ($('#pdfPw')?.value || '').trim().toUpperCase();
+  st.innerHTML = '<div class="hint"><span class="spin"></span> 解析 PDF 中…</div>';
+  const all = []; const logs = []; let sample = [];
+  try { await loadPdfjs(); } catch (e) { st.innerHTML = `<div class="hint" style="color:var(--red)">PDF 解析元件載入失敗（需連網）：${esc(e.message)}</div>`; return; }
+  for (const f of files) {
+    try {
+      const lines = await pdfLines(f, pw);
+      const rows = parseTdccPdf(lines);
+      all.push(...rows);
+      logs.push(`✅ ${f.name}：${rows.length} 檔`);
+      if (!sample.length || !rows.length) sample = lines.filter(l => /\d{4}/.test(l.text)).slice(0, 40).map(l => l.text);
+    } catch (e) {
+      const msg = e?.name === 'PasswordException' ? (pw ? '密碼錯誤' : '需要密碼（請填身分證字號）') : (e.message || String(e));
+      logs.push(`❌ ${f.name}：${msg}`);
+    }
+  }
+  // 相同代號（不同券商）加總股數
+  const merged = parseHoldings(all.map(r => `${r.code},${(r.name || '').replace(/,/g, ' ')},${r.shares}`).join('\n'));
+  st.innerHTML = `<div class="hint">${logs.map(esc).join('<br>')}</div>` +
+    (sample.length ? `<details class="hint"><summary>股數不對或讀不到？點這裡看 PDF 原始文字，截圖給 Claude 調整</summary><pre style="white-space:pre-wrap;font-size:11px">${esc(sample.join('\n'))}</pre></details>` : '');
+  if (merged.list.length) {
+    S.ui.importPreview = merged; S.ui.importMode = 'merge';
+    const keepPw = $('#pdfPw').value, keepSt = st.innerHTML;
+    renderHoldings(); $('#pdfPw').value = keepPw; $('#pdfStatus').innerHTML = keepSt;
+    toast(`讀到 ${merged.list.length} 檔，請確認後按「確認匯入」`);
+  }
+}
 /* =========================================================
  *  畫面
  * ========================================================= */
@@ -1063,6 +1153,13 @@ function renderHoldings() {
         <button class="btn grow" data-act="pickcsv">📄 選擇 CSV 檔</button>
         <button class="btn pri grow" data-act="parse">解析預覽</button>
       </div>
+      <div class="sep"></div>
+      <h3 style="margin-bottom:6px">🏦 從集保 e 手掌握匯入</h3>
+      <div class="small muted">可一次選多個券商的 PDF，相同股票會自動加總股數。檔案只在這支手機上解析，不會上傳。</div>
+      <label class="f">PDF 開啟密碼（身分證字號，英文大寫）</label>
+      <input type="password" id="pdfPw" placeholder="只用來開檔，不會儲存" autocomplete="off" autocapitalize="characters">
+      <button class="btn full" style="margin-top:10px" data-act="pickpdf">📑 選擇集保 PDF（可多選）</button>
+      <div id="pdfStatus"></div>
       ${pv ? `
         <div class="sep"></div>
         <div class="row between"><b>解析結果：${pv.list.length} 檔</b>${pv.bad.length ? `<span class="chip red">${pv.bad.length} 行無法辨識</span>` : ''}</div>
@@ -1198,6 +1295,7 @@ document.addEventListener('click', async e => {
     else if (a === 'aiall') aiCheckAll();
     else if (a === 'pickcsv') $('#fileCsv').click();
     else if (a === 'pickjson') $('#fileJson').click();
+    else if (a === 'pickpdf') $('#filePdf').click();
     else if (a === 'parse') { S.ui.importPreview = parseHoldings($('#csvText').value); if (!S.ui.importPreview.list.length) toast('沒有解析到任何持股'); const keep = $('#csvText').value; renderHoldings(); $('#csvText').value = keep; }
     else if (a === 'apply') applyImport();
     else if (a === 'export') exportBackup();
@@ -1224,6 +1322,7 @@ document.addEventListener('change', async e => {
   else if (t.dataset.set) { const k = t.dataset.set; S.settings[k] = t.type === 'number' ? (num(t.value) ?? DEFAULTS[k]) : t.value.trim(); await save.settings(); renderHeader(); toast('已儲存', 1000); }
   else if (t.dataset.key) { LS.set(t.dataset.key, t.value.trim()); toast('API Key 已存於本機', 1200); }
   else if (t.id === 'fileCsv' && t.files[0]) { const txt = await readFileText(t.files[0]); $('#csvText').value = txt; S.ui.importPreview = parseHoldings(txt); renderHoldings(); $('#csvText').value = txt; t.value = ''; }
+  else if (t.id === 'filePdf' && t.files.length) { await importPdfs([...t.files]); t.value = ''; }
   else if (t.id === 'fileJson' && t.files[0]) { try { await importBackup(await t.files[0].text()); } catch (err) { toast('還原失敗：' + err.message, 3500); } t.value = ''; }
 });
 async function readFileText(file) {

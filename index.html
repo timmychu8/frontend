@@ -194,7 +194,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
 
 <script>
 'use strict';
-const APP_VERSION = '2026.11.24-r9'; // 每次更新畫面都要改這個版本號
+const APP_VERSION = '2026.11.24-r10'; // 每次更新畫面都要改這個版本號
 /* =========================================================
  *  基礎工具
  * ========================================================= */
@@ -268,6 +268,8 @@ const LS = { get: k => { try { return localStorage.getItem(k) || ''; } catch { r
 const DEFAULTS = {
   workerUrl: 'https://tw-stock-radar.timmychu8.workers.dev',
   colorIntl: false,
+  aiRpm: 5,        // AI 每分鐘最多請求次數（Gemini 免費版 = 5）
+  aiBatch: 4,      // 批次查核時，每次請求合併幾檔
   autoUpdate: true,          // 開啟 App 時自動更新
   autoTimes: '16:30, 21:30', // 每天的更新時間點（台灣時間）
   aiProvider: 'gemini',
@@ -712,13 +714,14 @@ function buildFacts(code) {
 function r1(v) { return v == null ? null : Math.round(v / 100) / 10; } // 股 → 張（一位小數）
 
 async function callAI(userText) {
+  const sys = /^請查核以下 \d+ 檔/.test(userText) ? AI_SYS + AI_BATCH_NOTE : AI_SYS;
   const p = S.settings.aiProvider;
   if (p === 'claude') {
     const key = LS.get('key_claude'); if (!key) throw new Error('尚未設定 Claude API Key');
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: S.settings.claudeModel, max_tokens: 1500, temperature: 0.1, system: AI_SYS, messages: [{ role: 'user', content: userText }] }),
+      body: JSON.stringify({ model: S.settings.claudeModel, max_tokens: 6000, temperature: 0.1, system: sys, messages: [{ role: 'user', content: userText }] }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j?.error?.message || `Claude HTTP ${r.status}`);
@@ -728,7 +731,7 @@ async function callAI(userText) {
     const u = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.settings.geminiModel)}:generateContent?key=${encodeURIComponent(key)}`;
     const r = await fetch(u, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: AI_SYS }] }, contents: [{ role: 'user', parts: [{ text: userText }] }], generationConfig: { temperature: 0.1, responseMimeType: 'application/json' } }),
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents: [{ role: 'user', parts: [{ text: userText }] }], generationConfig: { temperature: 0.1, responseMimeType: 'application/json' } }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j?.error?.message || `Gemini HTTP ${r.status}`);
@@ -742,29 +745,109 @@ function parseAIJson(t) {
   if (!['red', 'green', 'yellow'].includes(o.level)) o.level = 'yellow';
   return o;
 }
+/* ---------- 額度控制：排隊 + 自動重試 ---------- */
+let _aiLast = 0;
+async function aiThrottle() {
+  const gap = 60000 / Math.max(1, num(S.settings.aiRpm) || 5) + 300;
+  const wait = _aiLast + gap - Date.now();
+  if (wait > 0) await sleep(wait);
+  _aiLast = Date.now();
+}
+function aiErrKind(msg) {
+  if (/per ?day|PerDay|daily/i.test(msg)) return 'daily';
+  if (/quota|rate|429|RESOURCE_EXHAUSTED|overloaded|529|503/i.test(msg)) return 'rate';
+  return 'other';
+}
+function aiErrText(msg) {
+  const k = aiErrKind(msg);
+  if (k === 'daily') return '已用完今天的 AI 免費額度，明天會重置（或到 Google AI Studio 開啟付費）。';
+  if (k === 'rate') return '暫時超過每分鐘的免費額度，稍後再試。';
+  if (/API key not valid|API_KEY_INVALID|invalid x-api-key|authentication/i.test(msg)) return 'API Key 無效，請到「設定」重新貼上。';
+  if (/not found|not supported/i.test(msg) && /model/i.test(msg)) return '模型名稱已失效，請到「設定」更新模型名稱。';
+  return msg;
+}
+async function callAIQueued(text) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (S.aiStop) throw new Error('已停止');
+    await aiThrottle();
+    try { return await callAI(text); }
+    catch (e) {
+      const msg = String(e.message || e);
+      if (aiErrKind(msg) !== 'rate' || attempt === 3) throw e;
+      const sec = +(msg.match(/retry in ([\d.]+)s/i)?.[1] || 30);
+      $('#hdrSub').textContent = `⏳ 達到每分鐘額度，${Math.ceil(sec)} 秒後自動重試…`;
+      await sleep((sec + 1.5) * 1000);
+    }
+  }
+}
+
 async function aiCheck(code, silent) {
   if (S.aiBusy.has(code)) return;
   S.aiBusy.add(code); rerenderCurrent();
   try {
     const facts = buildFacts(code);
-    const txt = await callAI(`請查核以下持股的官方一手資料，依規則輸出 JSON。\n\n${JSON.stringify(facts, null, 1)}`);
+    const txt = await callAIQueued(`請查核以下持股的官方一手資料，依規則輸出 JSON。\n\n${JSON.stringify(facts, null, 1)}`);
     S.ai[code] = { ...parseAIJson(txt), at: Date.now(), provider: S.settings.aiProvider };
     await save.ai();
   } catch (e) {
-    if (!silent) toast('AI 查核失敗：' + (e.message || e), 4000);
-    S.ai[code] = { error: String(e.message || e), at: Date.now() };
+    const t = aiErrText(String(e.message || e));
+    if (!silent) toast('AI 查核失敗：' + t, 4000);
+    S.ai[code] = { error: t, at: Date.now() };
   } finally {
-    S.aiBusy.delete(code); rerenderCurrent();
+    S.aiBusy.delete(code); rerenderCurrent(); renderHeader();
   }
 }
+
+const AI_BATCH_NOTE = `
+【批次模式】這次的資料是一個陣列，包含多檔不同股票。請對每一檔「分別獨立」查核，絕不可把甲股票的數字用在乙股票上。
+改為輸出：{"results":[{"code":"股票代號", ...上面規定的每一個欄位}]}，results 的筆數必須等於輸入的股票數。`;
+function parseAIBatch(t) {
+  t = String(t || '').replace(/```json|```/g, '').trim();
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  const o = JSON.parse(t.slice(a, b + 1));
+  return Array.isArray(o) ? o : (o.results || []);
+}
 async function aiCheckAll() {
-  const list = alertList().map(x => x.code).filter(c => !(S.ai[c] && !S.ai[c].error && Date.now() - S.ai[c].at < 12 * 3600e3));
+  if (S.aiRunning) { S.aiStop = true; toast('會在目前這一批完成後停止'); return; }
+  const LV = { red: 0, yellow: 1, green: 2 };
+  const list = alertList().sort((a, b) => LV[a.lv] - LV[b.lv]).map(x => x.code)
+    .filter(c => !(S.ai[c] && !S.ai[c].error && Date.now() - S.ai[c].at < 12 * 3600e3));
   if (!list.length) { toast('所有異常標的 12 小時內都已查核過'); return; }
-  if (!confirm(`將對 ${list.length} 檔異常標的呼叫 AI（會消耗你的 API 額度），確定？`)) return;
-  const q = [...list]; let done = 0;
-  const w = async () => { while (q.length) { const c = q.shift(); await aiCheck(c, true); done++; $('#hdrSub').textContent = `AI 查核中 ${done}/${list.length}`; } };
-  await Promise.all([w(), w()]);
-  renderHeader(); toast('🤖 批次 AI 查核完成');
+  const bs = Math.min(8, Math.max(1, num(S.settings.aiBatch) || 4));
+  const calls = Math.ceil(list.length / bs);
+  const mins = Math.ceil(calls / Math.max(1, num(S.settings.aiRpm) || 5));
+  if (!confirm(`將查核 ${list.length} 檔（🔴 高風險優先），每次合併 ${bs} 檔，共約 ${calls} 次請求、約 ${mins} 分鐘。\n\n期間可以切到其他 App，回來會接著跑；再按一次按鈕可停止。確定開始？`)) return;
+  S.aiRunning = true; S.aiStop = false; rerenderCurrent();
+  let done = 0, failed = 0, stopMsg = '';
+  try {
+    for (let i = 0; i < list.length; i += bs) {
+      if (S.aiStop) { stopMsg = '已停止'; break; }
+      const chunk = list.slice(i, i + bs);
+      chunk.forEach(c => S.aiBusy.add(c)); rerenderCurrent();
+      $('#hdrSub').textContent = `🤖 AI 查核中 ${done}/${list.length}（受免費額度限制，會自動排隊）`;
+      try {
+        const facts = chunk.map(buildFacts);
+        const txt = await callAIQueued(`請查核以下 ${chunk.length} 檔持股的官方一手資料，依規則輸出 JSON。\n\n${JSON.stringify(facts, null, 1)}`);
+        const res = parseAIBatch(txt);
+        for (const c of chunk) {
+          const r = res.find(x => String(x.code || '').trim() === c);
+          if (r) { if (!['red', 'green', 'yellow'].includes(r.level)) r.level = 'yellow'; S.ai[c] = { ...r, at: Date.now(), provider: S.settings.aiProvider }; }
+          else { S.ai[c] = { error: 'AI 這次沒有回傳這一檔的結果，可單獨再查一次。', at: Date.now() }; failed++; }
+        }
+      } catch (e) {
+        const msg = String(e.message || e);
+        const t = aiErrText(msg);
+        chunk.forEach(c => { S.ai[c] = { error: t, at: Date.now() }; }); failed += chunk.length;
+        if (aiErrKind(msg) === 'daily' || /API Key|Key 無效|模型名稱/.test(t)) { stopMsg = t; break; }
+      } finally {
+        chunk.forEach(c => S.aiBusy.delete(c)); done += chunk.length;
+        await save.ai(); rerenderCurrent();
+      }
+    }
+  } finally {
+    S.aiRunning = false; S.aiStop = false; rerenderCurrent(); renderHeader();
+  }
+  toast(stopMsg ? `🤖 ${stopMsg}` : `🤖 批次查核完成${failed ? `（${failed} 檔失敗，可再按一次補查）` : ''}`, 4000);
 }
 
 /* =========================================================
@@ -997,7 +1080,7 @@ function renderAlerts() {
     </div>
     <div class="row" style="margin-bottom:10px">
       <button class="btn grow" data-act="update" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span> 更新中' : '🔄 更新官方數據'}</button>
-      <button class="btn ai grow" data-act="aiall" ${al.length ? '' : 'disabled'}>🤖 全部 AI 查核</button>
+      <button class="btn ai grow" data-act="aiall" ${al.length ? '' : 'disabled'}>${S.aiRunning ? '⏹ 停止查核' : '🤖 全部 AI 查核'}</button>
     </div>
     <div class="seg" style="margin-bottom:12px">
       ${[['all', `全部 ${al.length}`], ['red', `🔴 ${c.red}`], ['green', `🟢 ${c.green}`], ['yellow', `🟡 ${c.yellow}`]].map(([k, t]) => `<button data-af="${k}" class="${f === k ? 'on' : ''}">${t}</button>`).join('')}
@@ -1252,6 +1335,11 @@ function renderSettings() {
       <input type="password" data-key="key_claude" value="${esc(LS.get('key_claude'))}" placeholder="sk-ant-…" autocomplete="off">
       <label class="f">Claude 模型</label>
       <input data-set="claudeModel" value="${esc(T.claudeModel)}" autocapitalize="off">
+      <div class="grid2">
+        <div><label class="f">每分鐘最多請求</label><input type="number" inputmode="numeric" data-set="aiRpm" value="${T.aiRpm}"></div>
+        <div><label class="f">批次每次合併檔數</label><input type="number" inputmode="numeric" data-set="aiBatch" value="${T.aiBatch}"></div>
+      </div>
+      <div class="hint">Gemini 免費版每分鐘 5 次；付費後可調高。合併檔數越多越省次數，但單次回覆較慢（建議 3～5）。</div>
       <div class="hint">API Key 只存在這支 iPhone 的 localStorage，直接從手機呼叫 Google / Anthropic，不經過 Worker、不會寫入備份檔。</div>
     </div>
 

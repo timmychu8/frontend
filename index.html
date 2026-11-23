@@ -194,7 +194,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
 
 <script>
 'use strict';
-const APP_VERSION = '2026.11.24-r8'; // 每次更新畫面都要改這個版本號
+const APP_VERSION = '2026.11.24-r9'; // 每次更新畫面都要改這個版本號
 /* =========================================================
  *  基礎工具
  * ========================================================= */
@@ -271,7 +271,7 @@ const DEFAULTS = {
   autoUpdate: true,          // 開啟 App 時自動更新
   autoTimes: '16:30, 21:30', // 每天的更新時間點（台灣時間）
   aiProvider: 'gemini',
-  geminiModel: 'gemini-2.5-flash',
+  geminiModel: 'gemini-3.6-flash',
   claudeModel: 'claude-sonnet-5-5',
   revDown: -25,     // 營收 YoY ≤ 此值 → 高風險
   revUp: 30,        // 營收 YoY ≥ 此值 → 利多
@@ -296,6 +296,7 @@ async function load() {
   S.holdings = h || [];
   S.settings = { ...DEFAULTS, ...(s || {}) };
   if (!S.settings.workerUrl) S.settings.workerUrl = DEFAULTS.workerUrl;
+  if (!S.settings.geminiModel || S.settings.geminiModel === 'gemini-2.5-flash') S.settings.geminiModel = DEFAULTS.geminiModel;
   S.market = m || null;
   S.hist = { insti: {}, instiEmpty: {}, tdcc: {}, credit: {}, ...(hist || {}) };
   S.ai = ai || {};

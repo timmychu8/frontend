@@ -5,3 +5,5 @@
 - Deploy command：`npx wrangler deploy`
 
 只代理官方一手資料（TWSE / TPEx / TDCC），不含任何金鑰或個人資料。
+
+最後更新：2026-11-24 06:24（自動部署已啟用）

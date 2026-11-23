@@ -209,7 +209,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
 
 <script>
 'use strict';
-const APP_VERSION = '2026.11.24-r4'; // 每次更新畫面都要改這個版本號
+const APP_VERSION = '2026.11.24-r5'; // 每次更新畫面都要改這個版本號
 /* =========================================================
  *  基礎工具
  * ========================================================= */
@@ -866,9 +866,11 @@ async function pdfLines(file, password) {
   }
   return lines;
 }
+const TDCC_ROW = /(?:^|\s)(\d{4,6}[A-Z]?)\s+(\S+)\s+([\d,]+)\s+[\d,]+(?:\.\d+)?\s+\d{3,4}\/\d{1,2}\/\d{1,2}(?:\s|$)/;
 function parseTdccPdf(lines) {
   // 只讀「庫存」區段；遇到「交易明細」區段就略過。股數欄位依表頭位置對齊。
   const out = []; let sect = 'inv'; let qtyX = null;
+  const strict = lines.some(l => TDCC_ROW.test(l.text)); // 偵測到集保標準格式，就只採用標準格式的列
   for (const ln of lines) {
     const t = ln.text;
     if (/交易明細|異動明細/.test(t) && !/庫存/.test(t)) { sect = 'tx'; continue; }
@@ -876,11 +878,20 @@ function parseTdccPdf(lines) {
     const hdr = ln.items.find(i => /(庫存|餘額|集保).{0,4}(股數|數量)|^(股數|數量|餘額|庫存股數|今日餘額|庫存數量)$/.test(i.s));
     if (hdr && /代號|名稱/.test(t)) { qtyX = hdr.x + hdr.w / 2; continue; }
     if (sect !== 'inv') continue;
-    // 代號可能和名稱黏在一起（例如「2330台積電」）
+    // 集保 e 手掌握實際格式：序號 代號 名稱 股數 參考價 日期 參考市值
+    //   例：「2 1103 嘉泥 24 12.15 2026/11/23 291」
+    const mm = t.match(TDCC_ROW);
+    if (mm) {
+      const shares = num(mm[3]);
+      if (shares > 0) out.push({ code: mm[1], name: mm[2], shares: Math.round(shares), cost: null });
+      continue;
+    }
+    if (strict) continue;
+    // 備用：其他格式（代號可能和名稱黏在一起，例如「2330台積電」）
     const first = ln.items[0]?.s || '';
-    const m = first.match(/^(\d{4,6}[A-Z]?)(.*)$/);
+    const m = first.match(/^(\d{4,6}[A-Z]?)([^\d\/\-:.].*)?$/);
     if (!m) continue;
-    let name = m[2].trim(); let rest = ln.items.slice(1);
+    let name = (m[2] || '').trim(); let rest = ln.items.slice(1);
     if (!name && rest.length && !/^[\d,.\-]+$/.test(rest[0].s)) { name = rest[0].s; rest = rest.slice(1); }
     const nums = rest.filter(i => /^-?[\d,]+(\.\d+)?$/.test(i.s)).map(i => ({ v: num(i.s), x: i.x + i.w / 2, int: !/\./.test(i.s) }));
     if (!nums.length) continue;

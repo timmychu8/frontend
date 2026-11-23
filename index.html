@@ -147,17 +147,19 @@ td.r,th.r{text-align:right}
   background:rgba(44,44,50,.75);-webkit-backdrop-filter:var(--glass);backdrop-filter:var(--glass);border:.5px solid var(--stroke2);
   color:#fff;padding:10px 18px;border-radius:999px;font-size:14.5px;font-weight:600;transition:.25s;pointer-events:none;z-index:50;
   max-width:92vw;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast{visibility:hidden}
+#toast.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
 svg.chart{width:100%;height:64px;display:block}
 .hint{font-size:12.5px;color:var(--tx3);margin-top:6px;line-height:1.6}
 .sep{height:.5px;background:var(--line);margin:14px 0}
 .offline{background:var(--yellow-bg);color:var(--yellow);font-size:12.5px;padding:8px 12px;border-radius:12px;margin-bottom:12px;display:none}
-#updBar{position:fixed;z-index:40;left:50%;top:calc(var(--sat) + 8px);transform:translate(-50%,-150%);transition:transform .4s cubic-bezier(.3,1.25,.5,1);
+#updBar{position:fixed;z-index:40;left:50%;top:calc(var(--sat) + 8px);transform:translate(-50%,calc(-100% - var(--sat) - 40px));opacity:0;visibility:hidden;pointer-events:none;
+  transition:transform .4s cubic-bezier(.3,1.25,.5,1),opacity .25s,visibility 0s .4s;
   display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;font:inherit;font-size:14.5px;font-weight:600;color:#fff;border:.5px solid var(--stroke2);
   background:rgba(44,44,50,.75);-webkit-backdrop-filter:var(--glass);backdrop-filter:var(--glass);box-shadow:0 8px 24px rgba(0,0,0,.4);white-space:nowrap}
-#updBar.show{transform:translate(-50%,0)}
+#updBar.show{transform:translate(-50%,0);opacity:1;visibility:visible;pointer-events:auto;transition:transform .4s cubic-bezier(.3,1.25,.5,1),opacity .25s,visibility 0s}
 code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:6px}
 </style>
 </head>
@@ -194,7 +196,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
 
 <script>
 'use strict';
-const APP_VERSION = '2026.11.24-r10'; // 每次更新畫面都要改這個版本號
+const APP_VERSION = '2026.11.24-r11'; // 每次更新畫面都要改這個版本號
 /* =========================================================
  *  基礎工具
  * ========================================================= */
@@ -669,7 +671,7 @@ function evaluate(code) {
   if (s.exdiv?.date && s.exdiv.date >= today && daysBetween(today, s.exdiv.date) <= 21) out.push({ lv: 'info', k: 'ex', t: `${prettyDate(s.exdiv.date).slice(5)} 除${s.exdiv.type || '權息'}` });
   return out;
 }
-const LV_ORDER = { red: 0, green: 1, yellow: 2, info: 3 };
+const LV_ORDER = { red: 0, yellow: 1, green: 2, info: 3 }; // 高風險 → 觀察 → 利多
 function topLevel(al) { const a = al.filter(x => x.lv !== 'info'); if (!a.length) return null; return a.sort((x, y) => LV_ORDER[x.lv] - LV_ORDER[y.lv])[0].lv; }
 
 /* =========================================================
@@ -809,14 +811,13 @@ function parseAIBatch(t) {
 }
 async function aiCheckAll() {
   if (S.aiRunning) { S.aiStop = true; toast('會在目前這一批完成後停止'); return; }
-  const LV = { red: 0, yellow: 1, green: 2 };
-  const list = alertList().sort((a, b) => LV[a.lv] - LV[b.lv]).map(x => x.code)
+  const list = alertList().sort((a, b) => LV_ORDER[a.lv] - LV_ORDER[b.lv] || b.al.length - a.al.length).map(x => x.code)
     .filter(c => !(S.ai[c] && !S.ai[c].error && Date.now() - S.ai[c].at < 12 * 3600e3));
   if (!list.length) { toast('所有異常標的 12 小時內都已查核過'); return; }
   const bs = Math.min(8, Math.max(1, num(S.settings.aiBatch) || 4));
   const calls = Math.ceil(list.length / bs);
   const mins = Math.ceil(calls / Math.max(1, num(S.settings.aiRpm) || 5));
-  if (!confirm(`將查核 ${list.length} 檔（🔴 高風險優先），每次合併 ${bs} 檔，共約 ${calls} 次請求、約 ${mins} 分鐘。\n\n期間可以切到其他 App，回來會接著跑；再按一次按鈕可停止。確定開始？`)) return;
+  if (!confirm(`將查核 ${list.length} 檔（順序：🔴 高風險 → 🟡 觀察 → 🟢 利多），每次合併 ${bs} 檔，共約 ${calls} 次請求、約 ${mins} 分鐘。\n\n期間可以切到其他 App，回來會接著跑；再按一次按鈕可停止。確定開始？`)) return;
   S.aiRunning = true; S.aiStop = false; rerenderCurrent();
   let done = 0, failed = 0, stopMsg = '';
   try {
@@ -1075,15 +1076,15 @@ function renderAlerts() {
     <div class="stats">
       <div class="stat"><b>${S.holdings.length}</b><span>持股</span></div>
       <div class="stat"><b style="color:var(--red)">${c.red}</b><span>高風險</span></div>
-      <div class="stat"><b style="color:var(--green)">${c.green}</b><span>利多</span></div>
       <div class="stat"><b style="color:var(--yellow)">${c.yellow}</b><span>觀察</span></div>
+      <div class="stat"><b style="color:var(--green)">${c.green}</b><span>利多</span></div>
     </div>
     <div class="row" style="margin-bottom:10px">
       <button class="btn grow" data-act="update" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span> 更新中' : '🔄 更新官方數據'}</button>
       <button class="btn ai grow" data-act="aiall" ${al.length ? '' : 'disabled'}>${S.aiRunning ? '⏹ 停止查核' : '🤖 全部 AI 查核'}</button>
     </div>
     <div class="seg" style="margin-bottom:12px">
-      ${[['all', `全部 ${al.length}`], ['red', `🔴 ${c.red}`], ['green', `🟢 ${c.green}`], ['yellow', `🟡 ${c.yellow}`]].map(([k, t]) => `<button data-af="${k}" class="${f === k ? 'on' : ''}">${t}</button>`).join('')}
+      ${[['all', `全部 ${al.length}`], ['red', `🔴 ${c.red}`], ['yellow', `🟡 ${c.yellow}`], ['green', `🟢 ${c.green}`]].map(([k, t]) => `<button data-af="${k}" class="${f === k ? 'on' : ''}">${t}</button>`).join('')}
     </div>
     <div class="hint" style="margin:-4px 0 10px">第一層已剔除 ${routine} 則例行公告（法說會、股東會、自結等）；第二層依你的閾值篩出 ${al.length} 檔異常。</div>
     ${shown.length ? shown.map(x => {

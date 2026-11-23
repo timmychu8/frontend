@@ -1,5 +1,5 @@
 // 持股雷達 Service Worker：App 外殼離線快取（資料本身存在 IndexedDB）
-const CACHE = 'twsr-shell-v1';
+const CACHE = 'twsr-shell-v2';
 const SHELL = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

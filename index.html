@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="持股雷達">
 <meta name="theme-color" content="#000000">
 <meta name="format-detection" content="telephone=no">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://tw-stock-radar.timmychu8.workers.dev https://generativelanguage.googleapis.com https://api.anthropic.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>台股零股持股雷達</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -205,6 +206,9 @@ svg.chart{width:100%;height:64px;display:block}
 .chart-wrap{touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .readout{display:flex;justify-content:space-between;font-size:12px;color:var(--tx3);margin-top:2px}
 .readout b{color:var(--tx);font-weight:600;font-variant-numeric:tabular-nums}
+.backup-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;margin-bottom:12px;border-radius:16px;background:var(--card);border:.5px solid var(--stroke);font-size:14px;color:var(--tx2)}
+.backup-banner b{color:var(--accent);font-weight:600;white-space:nowrap}
+.backup-banner.warn{background:var(--yellow-bg);border-color:rgba(255,214,10,.25);color:var(--yellow)}
 #sheet{position:fixed;inset:0;z-index:60;visibility:hidden}
 #sheet.show{visibility:visible}
 .sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .25s}
@@ -255,7 +259,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
 
 <script>
 'use strict';
-const APP_VERSION = '2026.11.24-r13'; // 每次更新畫面都要改這個版本號
+const APP_VERSION = '2026.11.24-r14'; // 每次更新畫面都要改這個版本號
 /* =========================================================
  *  基礎工具
  * ========================================================= */
@@ -1074,6 +1078,7 @@ async function applyImport() {
 async function exportBackup() {
   const data = { app: 'tw-stock-radar', version: 1, exportedAt: new Date().toISOString(), holdings: S.holdings, settings: S.settings, hist: S.hist, ai: S.ai };
   const name = `持股雷達備份_${ymd(twNow())}.json`;
+  S.settings.lastBackup = Date.now(); await save.settings();
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   try {
     const file = new File([blob], name, { type: 'application/json' });
@@ -1096,7 +1101,7 @@ async function importBackup(text) {
  *  集保 e 手掌握 PDF 匯入（pdf.js 於本機解析，檔案不上傳）
  * ========================================================= */
 const PDFJS_VER = '4.10.38';
-const PDFJS_BASE = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}`;
+const PDFJS_BASE = new URL('vendor/pdfjs', location.href).href; // 本機化：不依賴第三方 CDN，離線也能解析
 let _pdfjs = null;
 async function loadPdfjs() {
   if (_pdfjs) return _pdfjs;
@@ -1108,7 +1113,7 @@ async function loadPdfjs() {
 async function pdfLines(file, password) {
   const lib = await loadPdfjs();
   const data = new Uint8Array(await file.arrayBuffer());
-  const doc = await lib.getDocument({ data, password: password || undefined, cMapUrl: `${PDFJS_BASE}/cmaps/`, cMapPacked: true, standardFontDataUrl: `${PDFJS_BASE}/standard_fonts/` }).promise;
+  const doc = await lib.getDocument({ data, password: password || undefined, cMapUrl: `${PDFJS_BASE}/cmaps/`, cMapPacked: true, isEvalSupported: false, standardFontDataUrl: `${PDFJS_BASE}/standard_fonts/` }).promise;
   const lines = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const tc = await (await doc.getPage(p)).getTextContent();
@@ -1168,7 +1173,7 @@ async function importPdfs(files) {
   const pw = ($('#pdfPw')?.value || '').trim().toUpperCase();
   st.innerHTML = '<div class="hint"><span class="spin"></span> 解析 PDF 中…</div>';
   const all = []; const logs = []; let sample = [];
-  try { await loadPdfjs(); } catch (e) { st.innerHTML = `<div class="hint" style="color:var(--red)">PDF 解析元件載入失敗（需連網）：${esc(e.message)}</div>`; return; }
+  try { await loadPdfjs(); } catch (e) { st.innerHTML = `<div class="hint" style="color:var(--red)">PDF 解析元件載入失敗：${esc(e.message)}</div>`; return; }
   for (const f of files) {
     try {
       const lines = await pdfLines(f, pw);
@@ -1566,6 +1571,10 @@ function renderHoldings() {
         <button class="btn pri full" data-act="apply">✅ 確認匯入 ${pv.list.length} 檔</button>` : ''}
     </div>
 
+    ${(() => { const lb = S.settings.lastBackup; const days = lb ? Math.floor((Date.now() - lb) / 864e5) : null;
+      if (!S.holdings.length) return '';
+      return `<div class="backup-banner ${days == null || days > 14 ? 'warn' : ''}" data-act="export">
+        <span>${days == null ? '還沒有備份過持股名單' : days === 0 ? '今天已備份' : `距離上次備份：${days} 天`}</span><b>${days != null && days <= 14 ? '再備份一次 ›' : '立即備份 ›'}</b></div>`; })()}
     <div class="card">
       <h3>💾 備份與還原</h3>
       <div class="small muted">清除 Safari 網站資料會一併刪除本機持股，建議每次調整名單後匯出備份到「檔案」App 或 iCloud。（備份不含 API Key）</div>

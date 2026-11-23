@@ -168,6 +168,11 @@ svg.chart{width:100%;height:64px;display:block}
 .hint{font-size:12.5px;color:var(--tx3);margin-top:6px;line-height:1.6}
 .sep{height:.5px;background:var(--line);margin:14px 0}
 .offline{background:var(--yellow-bg);color:var(--yellow);font-size:12.5px;padding:8px 12px;border-radius:14px;margin-bottom:12px;display:none}
+#updBar{position:fixed;z-index:40;left:50%;top:calc(var(--sat) + 8px);transform:translate(-50%,-140%);transition:transform .45s cubic-bezier(.34,1.45,.55,1);
+  display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;font:inherit;font-size:14.5px;font-weight:700;color:#fff;border:.5px solid rgba(255,255,255,.3);
+  background:linear-gradient(135deg,rgba(150,115,255,.85),rgba(80,140,255,.85));-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 10px 30px rgba(80,120,255,.45);white-space:nowrap}
+#updBar.show{transform:translate(-50%,0)}
 code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:6px}
 </style>
 </head>
@@ -197,11 +202,13 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
   </nav>
 </div>
 <div id="toast"></div>
+<button id="updBar" type="button">✨ 有新版本，點一下更新</button>
 <input type="file" id="fileCsv" accept=".csv,.txt,text/csv,text/plain" hidden>
 <input type="file" id="fileJson" accept=".json,application/json" hidden>
 
 <script>
 'use strict';
+const APP_VERSION = '2026.11.24-r3'; // 每次更新畫面都要改這個版本號
 /* =========================================================
  *  基礎工具
  * ========================================================= */
@@ -1151,7 +1158,7 @@ function renderSettings() {
         <button class="btn sm" data-act="clearhist">清除歷史籌碼</button>
         <button class="btn sm danger" data-act="wipe">全部重設</button>
       </div>
-      <div class="hint">資料來源：臺灣證券交易所 OpenAPI／T86、證券櫃檯買賣中心 OpenAPI、公開資訊觀測站重大訊息（經交易所 OpenAPI）、臺灣集中保管結算所開放資料。本工具不抓取任何媒體新聞。所有分級僅供參考，非投資建議。</div>
+      <div class="hint">資料來源：臺灣證券交易所 OpenAPI／T86、證券櫃檯買賣中心 OpenAPI、公開資訊觀測站重大訊息（經交易所 OpenAPI）、臺灣集中保管結算所開放資料。本工具不抓取任何媒體新聞。所有分級僅供參考，非投資建議。<br>App 版本：${APP_VERSION}</div>
     </div>`;
 }
 
@@ -1239,6 +1246,28 @@ window.addEventListener('online', () => $('#offline').style.display = 'none');
 window.addEventListener('offline', () => $('#offline').style.display = 'block');
 
 /* =========================================================
+ *  自動偵測新版本（打開 App、切回 App、每 5 分鐘檢查一次）
+ * ========================================================= */
+async function checkUpdate() {
+  if (!navigator.onLine) return;
+  try {
+    const r = await fetch(`index.html?check=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const m = (await r.text()).match(/APP_VERSION = '([^']+)'/);
+    if (m && m[1] !== APP_VERSION) $('#updBar').classList.add('show');
+  } catch { }
+}
+async function applyUpdate() {
+  $('#updBar').innerHTML = '<span class="spin"></span> 更新中…';
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    await reg?.update();
+    const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k)));
+  } catch { }
+  location.reload();
+}
+document.addEventListener('click', e => { if (e.target.closest('#updBar')) applyUpdate(); });
+/* =========================================================
  *  啟動
  * ========================================================= */
 (async () => {
@@ -1247,6 +1276,9 @@ window.addEventListener('offline', () => $('#offline').style.display = 'block');
   $('#main').addEventListener('scroll', () => document.body.classList.toggle('scrolled', $('#main').scrollTop > 34), { passive: true });
   renderAll();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
+  checkUpdate();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
+  setInterval(checkUpdate, 5 * 60 * 1000);
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => { });
 })();
 </script>

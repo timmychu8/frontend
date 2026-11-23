@@ -209,7 +209,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(25
 
 <script>
 'use strict';
-const APP_VERSION = '2026.11.24-r6'; // 每次更新畫面都要改這個版本號
+const APP_VERSION = '2026.11.24-r7'; // 每次更新畫面都要改這個版本號
 /* =========================================================
  *  基礎工具
  * ========================================================= */
@@ -283,6 +283,8 @@ const LS = { get: k => { try { return localStorage.getItem(k) || ''; } catch { r
 const DEFAULTS = {
   workerUrl: 'https://tw-stock-radar.timmychu8.workers.dev',
   colorIntl: false,
+  autoUpdate: true,          // 開啟 App 時自動更新
+  autoTimes: '16:30, 21:30', // 每天的更新時間點（台灣時間）
   aiProvider: 'gemini',
   geminiModel: 'gemini-2.5-flash',
   claudeModel: 'claude-sonnet-5-5',
@@ -934,6 +936,27 @@ async function importPdfs(files) {
   }
 }
 /* =========================================================
+ *  自動更新：打開或切回 App 時，若已過了設定的時間點且尚未更新，就自動抓官方數據
+ * ========================================================= */
+function lastCheckpoint() {
+  const times = String(S.settings.autoTimes || '').split(/[,，\s]+/).map(t => t.match(/^(\d{1,2}):(\d{2})$/)).filter(Boolean).map(m => [+m[1], +m[2]]);
+  if (!times.length) return 0;
+  const now = Date.now(); let best = 0;
+  for (let d = 0; d < 8; d++) {
+    const tw = new Date(now + 8 * 3600e3 - d * 864e5);
+    for (const [hh, mm] of times) {
+      const t = Date.UTC(tw.getUTCFullYear(), tw.getUTCMonth(), tw.getUTCDate(), hh, mm) - 8 * 3600e3;
+      if (t <= now && t > best) best = t;
+    }
+  }
+  return best;
+}
+function autoUpdateIfDue() {
+  if (!S.settings.autoUpdate || S.busy || !navigator.onLine || !apiBase() || !S.holdings.length) return;
+  const last = S.market?.updatedAt || 0;
+  if (last < lastCheckpoint()) { toast('⏰ 已到更新時間，自動抓取官方數據…'); updateAll(); }
+}
+/* =========================================================
  *  畫面
  * ========================================================= */
 function alertList() {
@@ -1214,6 +1237,13 @@ function renderSettings() {
       <div class="row" style="margin-top:10px">
         <button class="btn pri grow" data-act="update" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span> 更新中' : '🔄 立即更新全市場官方數據'}</button>
       </div>
+      <div class="row between" style="margin-top:12px">
+        <span>⏰ 打開 App 時自動更新</span>
+        <button class="btn sm ${T.autoUpdate ? 'pri' : ''}" data-act="autoupd">${T.autoUpdate ? '已開啟' : '已關閉'}</button>
+      </div>
+      <label class="f">每天自動更新的時間點（台灣時間，用逗號分隔）</label>
+      <input data-set="autoTimes" value="${esc(T.autoTimes)}" placeholder="16:30, 21:30" inputmode="numeric">
+      <div class="hint">iPhone 不允許網頁 App 在關閉時於背景執行，所以是「過了時間點後，你第一次打開或切回 App 時自動更新」。建議 16:30（三大法人、融資融券已公布）與 21:30（晚間重訊、月營收）。</div>
       <div style="margin-top:12px">
         ${DS.map(([k, label]) => { const st = S.sources[k] || {}; const cls = st.state === 'ok' ? 'ok' : st.state === 'err' ? 'err' : st.state === 'empty' ? 'empty' : ''; return `<div class="dsrow" data-ds="${k}"><span class="lb">${label}</span><div class="prog"><i class="${cls}" style="width:${st.state && st.state !== 'wait' ? '100%' : '0'}"></i></div><span class="st">${st.state === 'ok' ? (st.note || '完成') : st.state === 'err' ? '失敗' : st.state === 'empty' ? '無資料' : '—'}</span></div>`; }).join('')}
       </div>
@@ -1313,6 +1343,7 @@ document.addEventListener('click', async e => {
     else if (a === 'export') exportBackup();
     else if (a === 'delh') { S.holdings = S.holdings.filter(h => h.code !== code); await save.holdings(); renderAll(); }
     else if (a === 'clearh') { if (confirm('確定清空所有持股？（建議先匯出備份）')) { S.holdings = []; await save.holdings(); renderAll(); } }
+    else if (a === 'autoupd') { S.settings.autoUpdate = !S.settings.autoUpdate; await save.settings(); renderSettings(); }
     else if (a === 'color') { S.settings.colorIntl = !S.settings.colorIntl; await save.settings(); renderAll(); }
     else if (a === 'resetth') { for (const k of Object.keys(DEFAULTS)) if (!['workerUrl', 'aiProvider', 'geminiModel', 'claudeModel', 'colorIntl'].includes(k)) S.settings[k] = DEFAULTS[k]; await save.settings(); renderAll(); toast('已恢復預設閾值'); }
     else if (a === 'clearai') { S.ai = {}; await save.ai(); renderAll(); toast('已清除'); }
@@ -1388,7 +1419,8 @@ document.addEventListener('click', e => { if (e.target.closest('#updBar')) apply
   renderAll();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
   checkUpdate();
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { checkUpdate(); autoUpdateIfDue(); } });
+  setTimeout(autoUpdateIfDue, 800);
   setInterval(checkUpdate, 5 * 60 * 1000);
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => { });
 })();

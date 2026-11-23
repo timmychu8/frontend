@@ -1,0 +1,7 @@
+{
+  // Cloudflare 自動部署設定：每次 GitHub main 分支有更新，就重新部署這個 Worker
+  "name": "tw-stock-radar",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true
+}
